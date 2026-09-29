@@ -31,24 +31,73 @@ export default class CompileCommands {
       vscode.commands.registerCommand("peasy.compile", () => runCompileTask()),
       vscode.workspace.onDidDeleteFiles(() => generateProjects()),
       vscode.workspace.onDidCreateFiles(() => generateProjects()),
-      // Trigger the compile task on saving P files only
-      vscode.workspace.onDidSaveTextDocument(async (e) => {
-        if (e.fileName.endsWith(".p")) {
-          await runCompileTask();
+      vscode.workspace.onDidSaveTextDocument((e) => {
+        if (e.fileName.endsWith(".p") || e.fileName.endsWith(".pproj")) {
+          scheduleCompileOnSave();
         }
-      })
+      }),
+      vscode.tasks.onDidStartTask((e) => {
+        if (isCompileTask(e.execution.task)) {
+          activeCompile = e.execution;
+        }
+      }),
+      vscode.tasks.onDidEndTask((e) => {
+        if (isCompileTask(e.execution.task)) {
+          activeCompile = undefined;
+          if (rerunRequested) {
+            rerunRequested = false;
+            void runCompileTask();
+          }
+        }
+      }),
+      {
+        dispose: () => clearTimeout(saveDebounce),
+      }
     );
 
     return new CompileCommands();
   }
 }
 
+// At most one compile runs at a time. A request while one is starting or
+// running restarts it once it ends, so a burst of requests collapses into a
+// single rerun. Executing a task that is already running would otherwise make
+// VS Code prompt the user to pick an instance to terminate.
+let activeCompile: vscode.TaskExecution | undefined;
+let compileStarting = false;
+let rerunRequested = false;
+let saveDebounce: NodeJS.Timeout | undefined;
+
+function isCompileTask(task: vscode.Task): boolean {
+  return task.definition.type === PCommands.RunTask && task.name === "Compile";
+}
+
+// "Save All" fires one event per file; coalesce them into one compile.
+function scheduleCompileOnSave(): void {
+  clearTimeout(saveDebounce);
+  saveDebounce = setTimeout(() => void runCompileTask(), 200);
+}
+
 async function runCompileTask(): Promise<void> {
-  for (const t of await vscode.tasks.fetchTasks({ type: PCommands.RunTask })) {
-    if (t.name === "Compile") {
-      await vscode.tasks.executeTask(t);
+  if (compileStarting || activeCompile) {
+    rerunRequested = true;
+    activeCompile?.terminate();
+    return;
+  }
+  compileStarting = true;
+  rerunRequested = false;
+  try {
+    const tasks = await vscode.tasks.fetchTasks({ type: PCommands.RunTask });
+    const task = tasks.find(isCompileTask);
+    if (!task) {
       return;
     }
+    const execution = await vscode.tasks.executeTask(task);
+    if (rerunRequested) {
+      execution.terminate();
+    }
+  } finally {
+    compileStarting = false;
   }
 }
 

@@ -54,7 +54,7 @@ interfere with the host IDE's defaults when you're editing other files.
 
 | Key | Action |
 |---|---|
-| `F5` / `Ctrl+B` | Compile the current P project |
+| `F5` / `Ctrl+B` | **Peasy: Compile Current Project** |
 | `F6` | Open the Peasy trace visualizer |
 | `F4` / `Ctrl+L` | Show the project file picker |
 

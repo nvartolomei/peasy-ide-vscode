@@ -2,6 +2,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import * as messages from "./messages";
 
+import { ConfigurationConstants } from "../../constants";
 import { checkPInstalled, searchDirectory } from "../../miscTools";
 import { PCommands } from "../../commands";
 import BackgroundCompiler from "./backgroundCompiler";
@@ -76,6 +77,23 @@ let changeDebounce: NodeJS.Timeout | undefined;
 let changedFiles: string[] = [];
 let pendingMarks: Promise<void>[] = [];
 
+interface CompileSettings {
+  onChange: boolean;
+  onOpen: boolean;
+  includingProjects: boolean;
+}
+
+// Read on every use, so changes apply without reloading.
+function compileSettings(): CompileSettings {
+  const config = vscode.workspace.getConfiguration(ConfigurationConstants.SectionName);
+  const keys = ConfigurationConstants.Compile;
+  return {
+    onChange: config.get<boolean>(keys.OnChange, true),
+    onOpen: config.get<boolean>(keys.OnOpen, true),
+    includingProjects: config.get<boolean>(keys.IncludingProjects, true),
+  };
+}
+
 function activeFile(): string[] {
   const uri = vscode.window.activeTextEditor?.document.uri;
   return uri?.scheme === "file" ? [uri.fsPath] : [];
@@ -88,7 +106,8 @@ async function compile(files: string[] = []): Promise<void> {
   if (!compiler) {
     return;
   }
-  const dirs = await affectedProjectDirs(files, knownProjects());
+  const { includingProjects } = compileSettings();
+  const dirs = await affectedProjectDirs(files, knownProjects(), includingProjects);
   if (dirs.length === 0 && CompileCommands.currCwd) {
     dirs.push(CompileCommands.currCwd);
   }
@@ -105,7 +124,7 @@ function requestCompile(dirs: string[]): void {
 
 // Compiles the project of a file being opened, unless it is up to date.
 async function compileIfStale(file: string): Promise<void> {
-  if (!file.endsWith(".p")) {
+  if (!compileSettings().onOpen || !file.endsWith(".p")) {
     return;
   }
   const dirs = await affectedProjectDirs([file], knownProjects(), false);
@@ -134,6 +153,9 @@ async function markStale(file: string): Promise<void> {
 // one round of compiles.
 function scheduleCompile(file: string): void {
   const marked = markStale(file);
+  if (!compileSettings().onChange) {
+    return;
+  }
   changedFiles.push(file);
   pendingMarks.push(marked);
   clearTimeout(changeDebounce);

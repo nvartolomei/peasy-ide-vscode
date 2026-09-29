@@ -207,6 +207,24 @@
           ],
           "description": "Manages the folders that must be excluded from compiling in P."
         },
+        "p-vscode.compile.onChange": {
+          "scope": "window",
+          "type": "boolean",
+          "default": true,
+          "description": "Compile when P files change on disk, whether saved in the editor or changed by other tools. When off, compile with F5, Ctrl+B or the project picker."
+        },
+        "p-vscode.compile.onOpen": {
+          "scope": "window",
+          "type": "boolean",
+          "default": true,
+          "description": "Compile the project of a P file when it is opened, if the project has not been compiled since its sources last changed."
+        },
+        "p-vscode.compile.includingProjects": {
+          "scope": "window",
+          "type": "boolean",
+          "default": true,
+          "description": "Also compile the projects that include a compiled project through <IncludeProject>, since its changes may affect their errors."
+        },
         "p-vscode.dotnetExecutablePath": {
           "scope": "machine-overridable",
           "type": "string",

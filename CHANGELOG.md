@@ -20,6 +20,8 @@ All notable changes to the Peasy extension are documented in this file.
 - Projects compile when P files change on disk, including changes made
   outside the editor such as a git checkout.
 - Opening a P file compiles its project if it changed since its last compile.
+- `p-vscode.compile.onOpen`, `p-vscode.compile.onChange` and
+  `p-vscode.compile.includingProjects` control what compiles automatically.
 
 ### Fixed
 - Saving a P file no longer also runs a background Stately compile, which

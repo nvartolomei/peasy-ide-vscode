@@ -44,6 +44,18 @@ Peasy compiles the P project that contains the file you save or are editing, alo
 
 For files outside every project, press ++ctrl++ + ++l++ or ++f4++ to pick which P project to compile.
 
+## **Configuring Automatic Compilation**
+
+Workspaces with many P projects can take a while to compile. These settings control what compiles automatically:
+
+| Setting | Default | Description |
+|---|---|---|
+| `p-vscode.compile.onChange` | `true` | Compile when P files change on disk. |
+| `p-vscode.compile.onOpen` | `true` | Compile the project of an opened file if it changed since its last compile. |
+| `p-vscode.compile.includingProjects` | `true` | Also compile the projects that include a compiled project. |
+
+To turn automatic compilation off, set `onChange` and `onOpen` to `false`; ++ctrl++ + ++b++ or ++f5++ still compile on demand.
+
 ??? note "Demo Video: How to compile multiple projects in Peasy?"
 
     <figure class="video_container">

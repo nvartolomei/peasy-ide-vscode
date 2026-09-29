@@ -11,6 +11,7 @@ mine, merged together so they can be used before they land.
 | [#100](https://github.com/p-org/peasy-ide-vscode/pull/100) | `nv/background-single-compile` | Compiles in the background with a status bar item |
 | [#99](https://github.com/p-org/peasy-ide-vscode/pull/99) | `nv/fix-visualizer-welcome` | Shows the visualizer view welcome content |
 | [#95](https://github.com/p-org/peasy-ide-vscode/pull/95) | `fix-tilde-path` | Finds P when PATH contains `~` entries |
+| [#101](https://github.com/p-org/peasy-ide-vscode/pull/101) | `nv/run-on-remote` | Runs the extension on the remote host over Remote-SSH, WSL and Dev Containers |
 
 Base: `main` at `5daecec` (Release 1.1.0).
 

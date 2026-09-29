@@ -12,6 +12,8 @@ All notable changes to the Peasy extension are documented in this file.
 ### Fixed
 - Saving a P file no longer also runs a background Stately compile, which
   duplicated compilation and failed on P 3.1+.
+- `F5` / `Ctrl+B` / `F4` / `Ctrl+L` no longer terminate every running task in
+  the workspace.
 
 ## [1.1.0] - 2026-05-24
 

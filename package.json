@@ -146,69 +146,23 @@
     "keybindings": [
       {
         "key": "f5",
-        "command": "runCommands",
-        "when": "editorLangId == p || resourceLangId == p || resourceExtname == .p",
-        "args": {
-          "commands": [
-            {
-              "command": "workbench.action.tasks.terminate",
-              "args": "terminateAll"
-            },
-            {
-              "command": "workbench.action.tasks.runTask",
-              "args": "p-vscode: Compile"
-            }
-          ]
-        }
+        "command": "peasy.compile",
+        "when": "editorLangId == p || resourceLangId == p || resourceExtname == .p"
       },
       {
         "key": "ctrl+b",
-        "command": "runCommands",
-        "when": "editorLangId == p || resourceLangId == p || resourceExtname == .p",
-        "args": {
-          "commands": [
-            {
-              "command": "workbench.action.tasks.terminate",
-              "args": "terminateAll"
-            },
-            {
-              "command": "workbench.action.tasks.runTask",
-              "args": "p-vscode: Compile"
-            }
-          ]
-        }
+        "command": "peasy.compile",
+        "when": "editorLangId == p || resourceLangId == p || resourceExtname == .p"
       },
       {
         "key": "f4",
-        "command": "runCommands",
-        "when": "editorLangId == p || resourceLangId == p || resourceExtname == .p",
-        "args": {
-          "commands": [
-            {
-              "command": "workbench.action.tasks.terminate",
-              "args": "terminateAll"
-            },
-            {
-              "command": "peasy.showProjectFiles"
-            }
-          ]
-        }
+        "command": "peasy.showProjectFiles",
+        "when": "editorLangId == p || resourceLangId == p || resourceExtname == .p"
       },
       {
         "key": "ctrl+l",
-        "command": "runCommands",
-        "when": "(editorLangId == p || resourceLangId == p || resourceExtname == .p) && !terminalFocus",
-        "args": {
-          "commands": [
-            {
-              "command": "workbench.action.tasks.terminate",
-              "args": "terminateAll"
-            },
-            {
-              "command": "peasy.showProjectFiles"
-            }
-          ]
-        }
+        "command": "peasy.showProjectFiles",
+        "when": "(editorLangId == p || resourceLangId == p || resourceExtname == .p) && !terminalFocus"
       },
       {
         "command": "peasy-visualizer.run",

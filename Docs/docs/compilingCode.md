@@ -14,7 +14,7 @@
 
 Compiling P programs is now super easy with Peasy!
 
-Peasy compiles your P projects whenever a P file changes, whether you save it in the editor or it changes on disk, for example after a `git checkout`. Compilation uses the `p compile` command. You can also press ++ctrl++ + ++b++ or ++f5++ to compile the current project.
+Peasy compiles a P project when you open one of its files, unless nothing changed since its last compile, and whenever a P file changes, whether you save it in the editor or it changes on disk, for example after a `git checkout`. Compilation uses the `p compile` command. You can also press ++ctrl++ + ++b++ or ++f5++ to compile the current project.
 
 Compilation runs in the background. The `P` item in the status bar spins while compiling and then shows a check mark or the number of errors. Hover over it to see the result for each project, or click it to see the full compiler output.
 

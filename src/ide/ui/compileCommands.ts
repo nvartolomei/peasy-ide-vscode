@@ -50,11 +50,22 @@ export default class CompileCommands {
       watcher.onDidChange(onChange),
       watcher.onDidCreate(onCreateOrDelete),
       watcher.onDidDelete(onCreateOrDelete),
+      vscode.window.onDidChangeActiveTextEditor((editor) => {
+        if (editor?.document.uri.scheme === "file") {
+          void compileIfStale(editor.document.uri.fsPath);
+        }
+      }),
       {
         dispose: () => clearTimeout(changeDebounce),
       }
     );
 
+    // VS Code restores open editors before activation; treat the active one
+    // as just opened.
+    const [file] = activeFile();
+    if (file) {
+      await compileIfStale(file);
+    }
     return new CompileCommands();
   }
 }
@@ -63,6 +74,7 @@ const showCompilerOutputCommand = "peasy.showCompilerOutput";
 let compiler: BackgroundCompiler | undefined;
 let changeDebounce: NodeJS.Timeout | undefined;
 let changedFiles: string[] = [];
+let pendingMarks: Promise<void>[] = [];
 
 function activeFile(): string[] {
   const uri = vscode.window.activeTextEditor?.document.uri;
@@ -80,7 +92,27 @@ async function compile(files: string[] = []): Promise<void> {
   if (dirs.length === 0 && CompileCommands.currCwd) {
     dirs.push(CompileCommands.currCwd);
   }
-  compiler.compile(dirs);
+  requestCompile(dirs);
+}
+
+// Projects compiled, or queued to compile, since their sources last changed.
+const freshProjects = new Set<string>();
+
+function requestCompile(dirs: string[]): void {
+  dirs.forEach((dir) => freshProjects.add(dir));
+  compiler?.compile(dirs);
+}
+
+// Compiles the project of a file being opened, unless it is up to date.
+async function compileIfStale(file: string): Promise<void> {
+  if (!file.endsWith(".p")) {
+    return;
+  }
+  const dirs = await affectedProjectDirs([file], knownProjects(), false);
+  const stale = dirs.filter((dir) => !freshProjects.has(dir));
+  if (stale.length > 0) {
+    requestCompile(stale);
+  }
 }
 
 function knownProjects(): PProject[] {
@@ -90,15 +122,28 @@ function knownProjects(): PProject[] {
   }));
 }
 
+// A change makes its project stale, and every project including it, whether or
+// not they are recompiled right away.
+async function markStale(file: string): Promise<void> {
+  for (const dir of await affectedProjectDirs([file], knownProjects())) {
+    freshProjects.delete(dir);
+  }
+}
+
 // "Save All" or a git checkout changes many files at once; coalesce them into
 // one round of compiles.
 function scheduleCompile(file: string): void {
+  const marked = markStale(file);
   changedFiles.push(file);
+  pendingMarks.push(marked);
   clearTimeout(changeDebounce);
   changeDebounce = setTimeout(() => {
     const files = changedFiles;
+    const marks = pendingMarks;
     changedFiles = [];
-    void compile(files);
+    pendingMarks = [];
+    // Mark projects stale before the compile marks them fresh again.
+    void Promise.all(marks).then(() => compile(files));
   }, 300);
 }
 

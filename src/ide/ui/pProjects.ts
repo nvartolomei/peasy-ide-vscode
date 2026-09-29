@@ -8,13 +8,15 @@ export interface PProject {
 }
 
 // Directories of the projects that need recompiling when `files` change: the
-// project containing each file, and every project that includes one of those,
-// directly or transitively, via <IncludeProject>.
+// project containing each file and, unless `withIncluding` is false, every
+// project that includes one of those, directly or transitively, via
+// <IncludeProject>.
 export async function affectedProjectDirs(
   files: string[],
-  projects: PProject[]
+  projects: PProject[],
+  withIncluding = true
 ): Promise<string[]> {
-  const includedBy = await includedByMap(projects);
+  const includedBy = withIncluding ? await includedByMap(projects) : new Map<string, string[]>();
   const affected = new Set<string>();
   const pending = files
     .map((f) => owningProjectDir(f, projects))

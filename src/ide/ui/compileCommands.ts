@@ -4,13 +4,13 @@ import * as messages from "./messages";
 
 import { checkPInstalled, searchDirectory } from "../../miscTools";
 import { PCommands } from "../../commands";
+import BackgroundCompiler from "./backgroundCompiler";
 import TestingEditor from "./testinginEditor";
 
-// Runs `p compile` in a task. The working directory is set via ShellExecution's
-// `cwd` option rather than baked into the command string, so it works on every
-// shell (cmd.exe, PowerShell, bash, zsh) and tolerates paths containing spaces.
+// Compiles the active P project in the background on save and on request.
+// The `p-vscode: Compile` task is still provided for tasks.json and Run Task.
 export default class CompileCommands {
-  // Working directory for the active p compile task.
+  // Directory of the active P project; compiles run here.
   static currCwd = "";
   // All discovered P projects (one quick-pick entry per .pproj).
   static projects: vscode.QuickPickItem[] = [];
@@ -25,31 +25,45 @@ export default class CompileCommands {
   ): Promise<CompileCommands> {
     await generateProjects();
     createCompileTask();
+    compiler = new BackgroundCompiler(showCompilerOutputCommand);
 
     context.subscriptions.push(
+      compiler,
       vscode.commands.registerCommand("peasy.showProjectFiles", () => showFiles()),
-      vscode.commands.registerCommand("peasy.compile", () => runCompileTask()),
+      vscode.commands.registerCommand("peasy.compile", () => compile()),
+      vscode.commands.registerCommand(showCompilerOutputCommand, () =>
+        compiler?.showOutput()
+      ),
       vscode.workspace.onDidDeleteFiles(() => generateProjects()),
       vscode.workspace.onDidCreateFiles(() => generateProjects()),
-      // Trigger the compile task on saving P files only
-      vscode.workspace.onDidSaveTextDocument(async (e) => {
-        if (e.fileName.endsWith(".p")) {
-          await runCompileTask();
+      vscode.workspace.onDidSaveTextDocument((e) => {
+        if (e.fileName.endsWith(".p") || e.fileName.endsWith(".pproj")) {
+          scheduleCompileOnSave();
         }
-      })
+      }),
+      {
+        dispose: () => clearTimeout(saveDebounce),
+      }
     );
 
     return new CompileCommands();
   }
 }
 
-async function runCompileTask(): Promise<void> {
-  for (const t of await vscode.tasks.fetchTasks({ type: PCommands.RunTask })) {
-    if (t.name === "Compile") {
-      await vscode.tasks.executeTask(t);
-      return;
-    }
+const showCompilerOutputCommand = "peasy.showCompilerOutput";
+let compiler: BackgroundCompiler | undefined;
+let saveDebounce: NodeJS.Timeout | undefined;
+
+async function compile(): Promise<void> {
+  if (compiler && CompileCommands.currCwd) {
+    await compiler.compile(CompileCommands.currCwd);
   }
+}
+
+// "Save All" fires one event per file; coalesce them into one compile.
+function scheduleCompileOnSave(): void {
+  clearTimeout(saveDebounce);
+  saveDebounce = setTimeout(() => void compile(), 200);
 }
 
 /*
@@ -68,7 +82,7 @@ async function showFiles() {
       CompileCommands.options
     );
     if (selection) {
-      await runCompileTask();
+      await compile();
     }
   }
 }

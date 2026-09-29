@@ -246,6 +246,11 @@
         "command": "peasy.compile",
         "category": "Peasy",
         "title": "Compile Current Project"
+      },
+      {
+        "command": "peasy.showCompilerOutput",
+        "category": "Peasy",
+        "title": "Show Compiler Output"
       }
     ],
     "languages": [

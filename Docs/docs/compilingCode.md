@@ -16,6 +16,8 @@ Compiling P programs is now super easy with Peasy!
 
 Simply `Save` in VS Code editor and your project will be automatically compiled using the `p compile` command. Alternatively, you can press ++ctrl++ + ++b++ or ++f5++ to compile the current project.
 
+Compilation runs in the background. The `P` item in the status bar spins while compiling and then shows a check mark or the number of errors. Click it to see the full compiler output.
+
 ??? note "Demo Video: How to compile code in Peasy?"
 
     <figure class="video_container">
@@ -26,8 +28,7 @@ Simply `Save` in VS Code editor and your project will be automatically compiled 
 
 ## **Error Reporting**
 
-Peasy reports compilation errors in the `Problems` panel.
-If compiling a P project with ++ctrl++ + ++b++ or ++f5++ triggers errors, you can simply open the `Problems` panel in VS Code to view all compilation errors. You can jump to the error location by simply clicking the error.
+Peasy underlines compilation errors in the editor and lists them in the `Problems` panel. You can jump to the error location by simply clicking the error.
 
 ??? note "Demo Video: Where to view compilation errors in Peasy?"
 

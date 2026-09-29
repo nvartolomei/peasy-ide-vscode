@@ -9,11 +9,23 @@ All notable changes to the Peasy extension are documented in this file.
   P compiler dropped its Stately backend in P 3.1 (p-org/P#949), so
   `p compile --mode stately` fails on current P versions.
 
+### Changed
+- Compilation runs in the background instead of a terminal. A status bar item
+  shows progress and the error count; clicking it opens the compiler output
+  (also `Peasy: Show Compiler Output`). The `p-vscode: Compile` task is still
+  available for `tasks.json` and Run Task.
+
 ### Fixed
 - Saving a P file no longer also runs a background Stately compile, which
   duplicated compilation and failed on P 3.1+.
 - `F5` / `Ctrl+B` / `F4` / `Ctrl+L` no longer terminate every running task in
   the workspace.
+- Compile errors show up in the editor with P 3.1+, which prints each error
+  on a single line.
+- Errors in included projects (`../Other/...`) point at the right file, and
+  parse error locations are no longer one column off.
+- Saving again while compiling restarts the compile instead of prompting
+  "Select an instance to terminate".
 
 ## [1.1.0] - 2026-05-24
 

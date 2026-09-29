@@ -5,6 +5,7 @@ import * as messages from "./messages";
 import { checkPInstalled, searchDirectory } from "../../miscTools";
 import { PCommands } from "../../commands";
 import BackgroundCompiler from "./backgroundCompiler";
+import { affectedProjectDirs } from "./pProjects";
 import TestingEditor from "./testinginEditor";
 
 // Compiles the active P project in the background on save and on request.
@@ -30,7 +31,7 @@ export default class CompileCommands {
     context.subscriptions.push(
       compiler,
       vscode.commands.registerCommand("peasy.showProjectFiles", () => showFiles()),
-      vscode.commands.registerCommand("peasy.compile", () => compile()),
+      vscode.commands.registerCommand("peasy.compile", () => compile(activeFile())),
       vscode.commands.registerCommand(showCompilerOutputCommand, () =>
         compiler?.showOutput()
       ),
@@ -38,7 +39,7 @@ export default class CompileCommands {
       vscode.workspace.onDidCreateFiles(() => generateProjects()),
       vscode.workspace.onDidSaveTextDocument((e) => {
         if (e.fileName.endsWith(".p") || e.fileName.endsWith(".pproj")) {
-          scheduleCompileOnSave();
+          scheduleCompileOnSave(e.uri.fsPath);
         }
       }),
       {
@@ -54,16 +55,40 @@ const showCompilerOutputCommand = "peasy.showCompilerOutput";
 let compiler: BackgroundCompiler | undefined;
 let saveDebounce: NodeJS.Timeout | undefined;
 
-function compile(): void {
-  if (compiler && CompileCommands.currCwd) {
-    compiler.compile([CompileCommands.currCwd]);
+let savedFiles: string[] = [];
+
+function activeFile(): string[] {
+  const uri = vscode.window.activeTextEditor?.document.uri;
+  return uri?.scheme === "file" ? [uri.fsPath] : [];
+}
+
+// Compiles every project affected by `files`: the projects containing them and
+// the projects including those. Without any, compiles the project picked in
+// the project quick pick.
+async function compile(files: string[] = []): Promise<void> {
+  if (!compiler) {
+    return;
   }
+  const projects = CompileCommands.projects.map((p) => ({
+    dir: p.description ?? "",
+    pprojPath: path.join(p.description ?? "", p.label),
+  }));
+  const dirs = await affectedProjectDirs(files, projects);
+  if (dirs.length === 0 && CompileCommands.currCwd) {
+    dirs.push(CompileCommands.currCwd);
+  }
+  compiler.compile(dirs);
 }
 
 // "Save All" fires one event per file; coalesce them into one compile.
-function scheduleCompileOnSave(): void {
+function scheduleCompileOnSave(file: string): void {
+  savedFiles.push(file);
   clearTimeout(saveDebounce);
-  saveDebounce = setTimeout(() => void compile(), 200);
+  saveDebounce = setTimeout(() => {
+    const files = savedFiles;
+    savedFiles = [];
+    void compile(files);
+  }, 200);
 }
 
 /*
@@ -82,7 +107,7 @@ async function showFiles() {
       CompileCommands.options
     );
     if (selection) {
-      compile();
+      await compile();
     }
   }
 }

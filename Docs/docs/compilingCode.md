@@ -40,11 +40,9 @@ Peasy underlines compilation errors in the editor and lists them in the `Problem
 
 ## **Compiling Multiple Projects**
 
-When working in a directory with a single P project, Peasy automatically identifies the P project.
+Peasy compiles the P project that contains the file you save or are editing, along with every project that includes it through `<IncludeProject>`, so workspaces with several P projects need no setup. Each project keeps the errors of its last compile, so compiling one project leaves the errors of the others in place.
 
-**But what if there are multiple P projects in the same directory?**
-
-To select another P project, press ++ctrl++ + ++l++ or ++f4++. This will trigger a pop-up that shows all the available P projects in your current working directory. Simply click or select one of them to change the current P project!
+For files outside every project, press ++ctrl++ + ++l++ or ++f4++ to pick which P project to compile.
 
 ??? note "Demo Video: How to compile multiple projects in Peasy?"
 

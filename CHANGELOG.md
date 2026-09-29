@@ -37,6 +37,9 @@ All notable changes to the Peasy extension are documented in this file.
 - P and dotnet are now found when PATH contains unexpanded `~` entries (e.g.
   `~/.dotnet/tools` added by the macOS dotnet installer), instead of reporting
   P as not installed.
+- Over Remote-SSH, WSL and Dev Containers the extension runs on the remote
+  host. It could run on the local machine instead, where it reported that P
+  was not installed and that the workspace had no `.pproj` files.
 
 ## [1.1.0] - 2026-05-24
 

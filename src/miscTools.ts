@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
+import { execFile } from "child_process";
 import which = require("which");
 
 import { ConfigurationConstants } from "./constants";
@@ -51,3 +52,19 @@ export async function resolvePBinary(): Promise<string | undefined> {
 
 // Re-export `path.join` style helpers if downstream callers want them.
 export const joinPath = path.join;
+
+// Returns the installed P compiler's [major, minor] version, or undefined if
+// it cannot be determined. `p --version` exits non-zero even on success, so
+// the output is parsed regardless of the exit code.
+export async function getPVersion(): Promise<[number, number] | undefined> {
+  const binary = await resolvePBinary();
+  if (!binary) {
+    return undefined;
+  }
+  return new Promise((resolve) => {
+    execFile(binary, ["--version"], { timeout: 10000 }, (_err, stdout, stderr) => {
+      const match = /P version (\d+)\.(\d+)/.exec(`${stdout}${stderr}`);
+      resolve(match ? [Number(match[1]), Number(match[2])] : undefined);
+    });
+  });
+}

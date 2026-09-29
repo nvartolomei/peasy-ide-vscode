@@ -91,7 +91,7 @@
             "regexp": "(?:\\[Error:\\])"
           },
           {
-            "regexp": "\\[([a-zA-Z\\/\\.]+):([0-9]+):([0-9]+)\\](.*)",
+            "regexp": "^\\[(.+?):(\\d+):(\\d+)\\] (.*)$",
             "file": 1,
             "line": 2,
             "column": 3,
@@ -130,6 +130,42 @@
           "activeOnStart": true,
           "beginsPattern": "Parsing",
           "endsPattern": "~"
+        }
+      },
+      {
+        "name": "TypeSingleLine",
+        "fileLocation": [
+          "search",
+          {
+            "include": [
+              "${workspaceFolder}"
+            ]
+          }
+        ],
+        "pattern": {
+          "regexp": "^\\[Error:\\] \\[(.+?):(\\d+):(\\d+)\\] (.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "message": 4
+        }
+      },
+      {
+        "name": "ParseSingleLine",
+        "fileLocation": [
+          "search",
+          {
+            "include": [
+              "${workspaceFolder}"
+            ]
+          }
+        ],
+        "pattern": {
+          "regexp": "^\\[Parser Error:\\] \\[(.+?)\\] parse error: line (\\d+):(\\d+) (.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "message": 4
         }
       },
       {

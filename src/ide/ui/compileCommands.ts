@@ -2,7 +2,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import * as messages from "./messages";
 
-import { checkPInstalled, searchDirectory } from "../../miscTools";
+import { checkPInstalled, getPVersion, searchDirectory } from "../../miscTools";
 import { PCommands } from "../../commands";
 import TestingEditor from "./testinginEditor";
 
@@ -136,7 +136,7 @@ function createCompileTask() {
         ["compile", "--mode", "stately"],
         { cwd }
       );
-      const problemMatchers = ["$Parse", "$Type"];
+      const problemMatchers = await problemMatchersForInstalledP();
 
       // Surface the path to the generated visualization file via the VS Code
       // UI rather than appending `&& echo ...` to a shell string, which would
@@ -176,6 +176,15 @@ function createCompileTask() {
       return task;
     },
   });
+}
+
+// P 3.1 prints each diagnostic on the same line as its `[Error:]` or
+// `[Parser Error:]` tag; earlier versions print the tag on a line of its own.
+// An undetectable version is assumed to be current.
+async function problemMatchersForInstalledP(): Promise<string[]> {
+  const version = await getPVersion();
+  const singleLine = !version || version[0] > 3 || (version[0] === 3 && version[1] >= 1);
+  return singleLine ? ["$ParseSingleLine", "$TypeSingleLine"] : ["$Parse", "$Type"];
 }
 
 /*

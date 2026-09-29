@@ -2,6 +2,13 @@
 
 All notable changes to the Peasy extension are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- Compile errors show up in the editor again with P 3.1+, which prints each
+  error on a single line. The problem matchers are chosen by the installed P
+  version. File paths containing digits, `_` or `-` are now recognised.
+
 ## [1.1.0] - 2026-05-24
 
 ### Fixed

@@ -34,6 +34,9 @@ All notable changes to the Peasy extension are documented in this file.
   parse error locations are no longer one column off.
 - Saving again while compiling restarts the compile instead of prompting
   "Select an instance to terminate".
+- P and dotnet are now found when PATH contains unexpanded `~` entries (e.g.
+  `~/.dotnet/tools` added by the macOS dotnet installer), instead of reporting
+  P as not installed.
 
 ## [1.1.0] - 2026-05-24
 

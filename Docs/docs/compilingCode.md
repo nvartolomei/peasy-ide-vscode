@@ -16,7 +16,7 @@ Compiling P programs is now super easy with Peasy!
 
 Simply `Save` in VS Code editor and your project will be automatically compiled using the `p compile` command. Alternatively, you can press ++ctrl++ + ++b++ or ++f5++ to compile the current project.
 
-Compilation runs in the background. The `P` item in the status bar spins while compiling and then shows a check mark or the number of errors. Click it to see the full compiler output.
+Compilation runs in the background. The `P` item in the status bar spins while compiling and then shows a check mark or the number of errors. Hover over it to see the result for each project, or click it to see the full compiler output.
 
 ??? note "Demo Video: How to compile code in Peasy?"
 

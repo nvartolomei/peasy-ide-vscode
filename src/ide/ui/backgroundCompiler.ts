@@ -6,26 +6,40 @@ import { resolvePBinary } from "../../miscTools";
 import { Messages } from "./messages";
 import { PDiagnostic, parsePDiagnostics } from "./pDiagnostics";
 
+interface Run {
+  dir: string;
+  child?: ChildProcess;
+  cancelled: boolean;
+}
+
+interface ProjectResult {
+  diagnostics: Map<string, vscode.Diagnostic[]>;
+  failed: boolean;
+}
+
 // Runs `p compile` in the background and reports the result as editor
 // diagnostics and a status bar item, instead of in a terminal. The full
 // compiler output goes to the "P Compiler" output channel, which the status
 // bar item opens.
 //
-// At most one compile runs at a time: a new request cancels the running one
-// and starts over, so only the latest sources are ever reported.
+// One compile runs at a time. Requested projects wait in a queue; a request
+// for the project being compiled restarts it. Every project keeps the errors
+// of its last compile, so compiling one leaves the errors of the others.
 export default class BackgroundCompiler implements vscode.Disposable {
   private readonly output = vscode.window.createOutputChannel("P Compiler");
-  private readonly diagnostics = vscode.languages.createDiagnosticCollection("p");
+  private readonly collection = vscode.languages.createDiagnosticCollection("p");
   private readonly status = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left
   );
-  private running: ChildProcess | undefined;
-  private generation = 0;
+  private readonly results = new Map<string, ProjectResult>();
+  private queue: string[] = [];
+  private current: Run | undefined;
+  private pMissing = false;
 
   constructor(showOutputCommand: string) {
     this.status.name = "P Compiler";
     this.status.command = showOutputCommand;
-    this.setStatus("$(question) P", "P: not compiled yet");
+    this.updateStatus();
     this.status.show();
   }
 
@@ -33,99 +47,155 @@ export default class BackgroundCompiler implements vscode.Disposable {
     this.output.show(true);
   }
 
-  async compile(cwd: string): Promise<void> {
-    const generation = ++this.generation;
-    this.cancel();
+  compile(projectDirs: string[]): void {
+    for (const dir of projectDirs) {
+      if (this.current?.dir === dir) {
+        this.cancelCurrent();
+        this.queue = [dir, ...this.queue.filter((d) => d !== dir)];
+      } else if (!this.queue.includes(dir)) {
+        this.queue.push(dir);
+      }
+    }
+    void this.pump();
+  }
 
-    const binary = await resolvePBinary();
-    if (generation !== this.generation) {
+  dispose(): void {
+    this.queue = [];
+    this.cancelCurrent();
+    this.output.dispose();
+    this.collection.dispose();
+    this.status.dispose();
+  }
+
+  private async pump(): Promise<void> {
+    if (this.current || this.queue.length === 0) {
+      this.updateStatus();
       return;
     }
+    const run: Run = { dir: this.queue.shift() as string, cancelled: false };
+    this.current = run;
+    this.updateStatus();
+    await this.run(run);
+    if (this.current === run) {
+      this.current = undefined;
+    }
+    await this.pump();
+  }
+
+  private cancelCurrent(): void {
+    if (this.current) {
+      this.current.cancelled = true;
+      this.current.child?.kill();
+      this.output.appendLine(`[${path.basename(this.current.dir)}] cancelled`);
+      this.current = undefined;
+    }
+  }
+
+  private async run(run: Run): Promise<void> {
+    const name = path.basename(run.dir);
+    const binary = await resolvePBinary();
+    this.pMissing = !binary;
     if (!binary) {
-      this.setStatus("$(warning) P", Messages.Installation.noP);
       this.output.appendLine(Messages.Installation.noP);
       return;
     }
+    if (run.cancelled) {
+      return;
+    }
 
-    const project = path.basename(cwd);
-    this.setStatus("$(sync~spin) P", `P: compiling ${project}…`);
-    this.output.appendLine(`[${new Date().toLocaleTimeString()}] p compile (${cwd})`);
-
+    this.output.appendLine(`[${name}] p compile (${run.dir}) at ${new Date().toLocaleTimeString()}`);
     let text = "";
-    const child = spawn(binary, ["compile"], { cwd });
-    this.running = child;
-    const append = (chunk: Buffer) => {
-      const s = chunk.toString();
-      text += s;
-      this.output.append(s);
+    const child = spawn(binary, ["compile"], { cwd: run.dir });
+    run.child = child;
+    const onData = (chunk: Buffer) => {
+      text += chunk.toString();
+      this.output.append(chunk.toString());
     };
-    child.stdout?.on("data", append);
-    child.stderr?.on("data", append);
-
+    child.stdout?.on("data", onData);
+    child.stderr?.on("data", onData);
     const exitCode = await new Promise<number | null>((resolve) => {
       child.on("error", (err) => {
         this.output.appendLine(String(err));
         resolve(null);
       });
-      child.on("close", (code) => resolve(code));
+      child.on("close", resolve);
     });
-    if (generation !== this.generation) {
+    if (run.cancelled) {
       return;
     }
-    this.running = undefined;
 
     const found = parsePDiagnostics(text);
-    await this.publish(found, cwd);
-    if (generation !== this.generation) {
+    const diagnostics = await toVsDiagnostics(found, run.dir);
+    if (run.cancelled) {
       return;
     }
+    this.results.set(run.dir, { diagnostics, failed: exitCode !== 0 && found.length === 0 });
+    this.publish();
+  }
 
-    if (found.length > 0) {
-      const summary = `${found.length} error${found.length === 1 ? "" : "s"}`;
-      this.setStatus(`$(error) P ${found.length}`, `P: ${summary} in ${project}`);
-    } else if (exitCode !== 0) {
-      this.setStatus("$(error) P", `P: compiling ${project} failed, click for details`);
+  // Merges the errors of every project. A project included by another is
+  // compiled as part of both, so identical errors are reported once.
+  private publish(): void {
+    const merged = new Map<string, Map<string, vscode.Diagnostic>>();
+    for (const result of this.results.values()) {
+      for (const [uri, list] of result.diagnostics) {
+        const forFile = merged.get(uri) ?? new Map<string, vscode.Diagnostic>();
+        for (const d of list) {
+          forFile.set(`${d.range.start.line}:${d.range.start.character}:${d.message}`, d);
+        }
+        merged.set(uri, forFile);
+      }
+    }
+    this.collection.clear();
+    for (const [uri, forFile] of merged) {
+      this.collection.set(vscode.Uri.parse(uri), [...forFile.values()]);
+    }
+  }
+
+  private updateStatus(): void {
+    const summaries = [...this.results].map(([dir, r]) => {
+      const count = [...r.diagnostics.values()].reduce((n, l) => n + l.length, 0);
+      const result = r.failed ? "failed" : count === 0 ? "ok" : `${count} error${count === 1 ? "" : "s"}`;
+      return `${path.basename(dir)}: ${result}`;
+    });
+    let errors = 0;
+    this.collection.forEach((_uri, list) => (errors += list.length));
+    const anyFailed = [...this.results.values()].some((r) => r.failed);
+
+    if (this.pMissing) {
+      this.status.text = "$(warning) P";
+      this.status.tooltip = Messages.Installation.noP;
+    } else if (this.current) {
+      const queued = this.queue.length > 0 ? `, ${this.queue.length} queued` : "";
+      this.status.text = "$(sync~spin) P";
+      this.status.tooltip = `P: compiling ${path.basename(this.current.dir)}${queued}…`;
+    } else if (errors > 0 || anyFailed) {
+      this.status.text = errors > 0 ? `$(error) P ${errors}` : "$(error) P";
+      this.status.tooltip = ["P", ...summaries].join("\n") + "\n\nClick for compiler output";
+    } else if (summaries.length > 0) {
+      this.status.text = "$(check) P";
+      this.status.tooltip = ["P", ...summaries].join("\n");
     } else {
-      this.setStatus("$(check) P", `P: ${project} compiled`);
+      this.status.text = "$(question) P";
+      this.status.tooltip = "P: not compiled yet";
     }
   }
+}
 
-  dispose(): void {
-    this.generation++;
-    this.cancel();
-    this.output.dispose();
-    this.diagnostics.dispose();
-    this.status.dispose();
+async function toVsDiagnostics(
+  found: PDiagnostic[],
+  cwd: string
+): Promise<Map<string, vscode.Diagnostic[]>> {
+  const byFile = new Map<string, vscode.Diagnostic[]>();
+  for (const d of found) {
+    const uri = await resolveFile(d, cwd);
+    const range = await wordRangeAt(uri, new vscode.Position(d.line, d.character));
+    const diagnostic = new vscode.Diagnostic(range, d.message, vscode.DiagnosticSeverity.Error);
+    diagnostic.source = "p";
+    const key = uri.toString();
+    byFile.set(key, [...(byFile.get(key) ?? []), diagnostic]);
   }
-
-  private cancel(): void {
-    if (this.running) {
-      this.running.kill();
-      this.running = undefined;
-      this.output.appendLine("(cancelled)");
-    }
-  }
-
-  private setStatus(text: string, tooltip: string): void {
-    this.status.text = text;
-    this.status.tooltip = tooltip;
-  }
-
-  private async publish(found: PDiagnostic[], cwd: string): Promise<void> {
-    const byFile = new Map<string, vscode.Diagnostic[]>();
-    for (const d of found) {
-      const uri = await resolveFile(d, cwd);
-      const range = await wordRangeAt(uri, new vscode.Position(d.line, d.character));
-      const diagnostic = new vscode.Diagnostic(range, d.message, vscode.DiagnosticSeverity.Error);
-      diagnostic.source = "p";
-      const key = uri.toString();
-      byFile.set(key, [...(byFile.get(key) ?? []), diagnostic]);
-    }
-    this.diagnostics.clear();
-    for (const [uri, list] of byFile) {
-      this.diagnostics.set(vscode.Uri.parse(uri), list);
-    }
-  }
+  return byFile;
 }
 
 // Type errors carry a path relative to the compile's working directory, which

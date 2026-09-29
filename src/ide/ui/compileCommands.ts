@@ -54,9 +54,9 @@ const showCompilerOutputCommand = "peasy.showCompilerOutput";
 let compiler: BackgroundCompiler | undefined;
 let saveDebounce: NodeJS.Timeout | undefined;
 
-async function compile(): Promise<void> {
+function compile(): void {
   if (compiler && CompileCommands.currCwd) {
-    await compiler.compile(CompileCommands.currCwd);
+    compiler.compile([CompileCommands.currCwd]);
   }
 }
 
@@ -82,7 +82,7 @@ async function showFiles() {
       CompileCommands.options
     );
     if (selection) {
-      await compile();
+      compile();
     }
   }
 }

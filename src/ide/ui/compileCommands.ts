@@ -2,15 +2,17 @@ import * as path from "path";
 import * as vscode from "vscode";
 import * as messages from "./messages";
 
+import { ConfigurationConstants } from "../../constants";
 import { checkPInstalled, searchDirectory } from "../../miscTools";
 import { PCommands } from "../../commands";
+import BackgroundCompiler from "./backgroundCompiler";
+import { PProject, affectedProjectDirs } from "./pProjects";
 import TestingEditor from "./testinginEditor";
 
-// Runs `p compile` in a task. The working directory is set via ShellExecution's
-// `cwd` option rather than baked into the command string, so it works on every
-// shell (cmd.exe, PowerShell, bash, zsh) and tolerates paths containing spaces.
+// Compiles the active P project in the background on save and on request.
+// The `p-vscode: Compile` task is still provided for tasks.json and Run Task.
 export default class CompileCommands {
-  // Working directory for the active p compile task.
+  // Directory of the active P project; compiles run here.
   static currCwd = "";
   // All discovered P projects (one quick-pick entry per .pproj).
   static projects: vscode.QuickPickItem[] = [];
@@ -25,31 +27,146 @@ export default class CompileCommands {
   ): Promise<CompileCommands> {
     await generateProjects();
     createCompileTask();
+    compiler = new BackgroundCompiler(showCompilerOutputCommand);
+
+    // Watching the file system rather than editor saves also picks up
+    // changes made outside the editor, such as a git checkout.
+    const watcher = vscode.workspace.createFileSystemWatcher("**/*.{p,pproj}");
+    const onChange = (uri: vscode.Uri) => scheduleCompile(uri.fsPath);
+    const onCreateOrDelete = async (uri: vscode.Uri) => {
+      if (uri.fsPath.endsWith(".pproj")) {
+        await generateProjects();
+      }
+      scheduleCompile(uri.fsPath);
+    };
 
     context.subscriptions.push(
+      compiler,
       vscode.commands.registerCommand("peasy.showProjectFiles", () => showFiles()),
-      vscode.commands.registerCommand("peasy.compile", () => runCompileTask()),
-      vscode.workspace.onDidDeleteFiles(() => generateProjects()),
-      vscode.workspace.onDidCreateFiles(() => generateProjects()),
-      // Trigger the compile task on saving P files only
-      vscode.workspace.onDidSaveTextDocument(async (e) => {
-        if (e.fileName.endsWith(".p")) {
-          await runCompileTask();
+      vscode.commands.registerCommand("peasy.compile", () => compile(activeFile())),
+      vscode.commands.registerCommand(showCompilerOutputCommand, () =>
+        compiler?.showOutput()
+      ),
+      watcher,
+      watcher.onDidChange(onChange),
+      watcher.onDidCreate(onCreateOrDelete),
+      watcher.onDidDelete(onCreateOrDelete),
+      vscode.window.onDidChangeActiveTextEditor((editor) => {
+        if (editor?.document.uri.scheme === "file") {
+          void compileIfStale(editor.document.uri.fsPath);
         }
-      })
+      }),
+      {
+        dispose: () => clearTimeout(changeDebounce),
+      }
     );
 
+    // VS Code restores open editors before activation; treat the active one
+    // as just opened.
+    const [file] = activeFile();
+    if (file) {
+      await compileIfStale(file);
+    }
     return new CompileCommands();
   }
 }
 
-async function runCompileTask(): Promise<void> {
-  for (const t of await vscode.tasks.fetchTasks({ type: PCommands.RunTask })) {
-    if (t.name === "Compile") {
-      await vscode.tasks.executeTask(t);
-      return;
-    }
+const showCompilerOutputCommand = "peasy.showCompilerOutput";
+let compiler: BackgroundCompiler | undefined;
+let changeDebounce: NodeJS.Timeout | undefined;
+let changedFiles: string[] = [];
+let pendingMarks: Promise<void>[] = [];
+
+interface CompileSettings {
+  onChange: boolean;
+  onOpen: boolean;
+  includingProjects: boolean;
+}
+
+// Read on every use, so changes apply without reloading.
+function compileSettings(): CompileSettings {
+  const config = vscode.workspace.getConfiguration(ConfigurationConstants.SectionName);
+  const keys = ConfigurationConstants.Compile;
+  return {
+    onChange: config.get<boolean>(keys.OnChange, true),
+    onOpen: config.get<boolean>(keys.OnOpen, true),
+    includingProjects: config.get<boolean>(keys.IncludingProjects, true),
+  };
+}
+
+function activeFile(): string[] {
+  const uri = vscode.window.activeTextEditor?.document.uri;
+  return uri?.scheme === "file" ? [uri.fsPath] : [];
+}
+
+// Compiles every project affected by `files`: the projects containing them and
+// the projects including those. Without any, compiles the project picked in
+// the project quick pick.
+async function compile(files: string[] = []): Promise<void> {
+  if (!compiler) {
+    return;
   }
+  const { includingProjects } = compileSettings();
+  const dirs = await affectedProjectDirs(files, knownProjects(), includingProjects);
+  if (dirs.length === 0 && CompileCommands.currCwd) {
+    dirs.push(CompileCommands.currCwd);
+  }
+  requestCompile(dirs);
+}
+
+// Projects compiled, or queued to compile, since their sources last changed.
+const freshProjects = new Set<string>();
+
+function requestCompile(dirs: string[]): void {
+  dirs.forEach((dir) => freshProjects.add(dir));
+  compiler?.compile(dirs);
+}
+
+// Compiles the project of a file being opened, unless it is up to date.
+async function compileIfStale(file: string): Promise<void> {
+  if (!compileSettings().onOpen || !file.endsWith(".p")) {
+    return;
+  }
+  const dirs = await affectedProjectDirs([file], knownProjects(), false);
+  const stale = dirs.filter((dir) => !freshProjects.has(dir));
+  if (stale.length > 0) {
+    requestCompile(stale);
+  }
+}
+
+function knownProjects(): PProject[] {
+  return CompileCommands.projects.map((p) => ({
+    dir: p.description ?? "",
+    pprojPath: path.join(p.description ?? "", p.label),
+  }));
+}
+
+// A change makes its project stale, and every project including it, whether or
+// not they are recompiled right away.
+async function markStale(file: string): Promise<void> {
+  for (const dir of await affectedProjectDirs([file], knownProjects())) {
+    freshProjects.delete(dir);
+  }
+}
+
+// "Save All" or a git checkout changes many files at once; coalesce them into
+// one round of compiles.
+function scheduleCompile(file: string): void {
+  const marked = markStale(file);
+  if (!compileSettings().onChange) {
+    return;
+  }
+  changedFiles.push(file);
+  pendingMarks.push(marked);
+  clearTimeout(changeDebounce);
+  changeDebounce = setTimeout(() => {
+    const files = changedFiles;
+    const marks = pendingMarks;
+    changedFiles = [];
+    pendingMarks = [];
+    // Mark projects stale before the compile marks them fresh again.
+    void Promise.all(marks).then(() => compile(files));
+  }, 300);
 }
 
 /*
@@ -68,7 +185,7 @@ async function showFiles() {
       CompileCommands.options
     );
     if (selection) {
-      await runCompileTask();
+      await compile();
     }
   }
 }

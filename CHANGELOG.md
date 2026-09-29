@@ -17,6 +17,8 @@ All notable changes to the Peasy extension are documented in this file.
 - Saving or pressing `F5` / `Ctrl+B` compiles the project that contains the
   file and every project that includes it, rather than the first project
   found in the workspace. Each project keeps its own errors.
+- Projects compile when P files change on disk, including changes made
+  outside the editor such as a git checkout.
 
 ### Fixed
 - Saving a P file no longer also runs a background Stately compile, which

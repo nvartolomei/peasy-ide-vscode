@@ -5,7 +5,7 @@ import * as messages from "./messages";
 import { checkPInstalled, searchDirectory } from "../../miscTools";
 import { PCommands } from "../../commands";
 import BackgroundCompiler from "./backgroundCompiler";
-import { affectedProjectDirs } from "./pProjects";
+import { PProject, affectedProjectDirs } from "./pProjects";
 import TestingEditor from "./testinginEditor";
 
 // Compiles the active P project in the background on save and on request.
@@ -28,6 +28,17 @@ export default class CompileCommands {
     createCompileTask();
     compiler = new BackgroundCompiler(showCompilerOutputCommand);
 
+    // Watching the file system rather than editor saves also picks up
+    // changes made outside the editor, such as a git checkout.
+    const watcher = vscode.workspace.createFileSystemWatcher("**/*.{p,pproj}");
+    const onChange = (uri: vscode.Uri) => scheduleCompile(uri.fsPath);
+    const onCreateOrDelete = async (uri: vscode.Uri) => {
+      if (uri.fsPath.endsWith(".pproj")) {
+        await generateProjects();
+      }
+      scheduleCompile(uri.fsPath);
+    };
+
     context.subscriptions.push(
       compiler,
       vscode.commands.registerCommand("peasy.showProjectFiles", () => showFiles()),
@@ -35,15 +46,12 @@ export default class CompileCommands {
       vscode.commands.registerCommand(showCompilerOutputCommand, () =>
         compiler?.showOutput()
       ),
-      vscode.workspace.onDidDeleteFiles(() => generateProjects()),
-      vscode.workspace.onDidCreateFiles(() => generateProjects()),
-      vscode.workspace.onDidSaveTextDocument((e) => {
-        if (e.fileName.endsWith(".p") || e.fileName.endsWith(".pproj")) {
-          scheduleCompileOnSave(e.uri.fsPath);
-        }
-      }),
+      watcher,
+      watcher.onDidChange(onChange),
+      watcher.onDidCreate(onCreateOrDelete),
+      watcher.onDidDelete(onCreateOrDelete),
       {
-        dispose: () => clearTimeout(saveDebounce),
+        dispose: () => clearTimeout(changeDebounce),
       }
     );
 
@@ -53,9 +61,8 @@ export default class CompileCommands {
 
 const showCompilerOutputCommand = "peasy.showCompilerOutput";
 let compiler: BackgroundCompiler | undefined;
-let saveDebounce: NodeJS.Timeout | undefined;
-
-let savedFiles: string[] = [];
+let changeDebounce: NodeJS.Timeout | undefined;
+let changedFiles: string[] = [];
 
 function activeFile(): string[] {
   const uri = vscode.window.activeTextEditor?.document.uri;
@@ -69,26 +76,30 @@ async function compile(files: string[] = []): Promise<void> {
   if (!compiler) {
     return;
   }
-  const projects = CompileCommands.projects.map((p) => ({
-    dir: p.description ?? "",
-    pprojPath: path.join(p.description ?? "", p.label),
-  }));
-  const dirs = await affectedProjectDirs(files, projects);
+  const dirs = await affectedProjectDirs(files, knownProjects());
   if (dirs.length === 0 && CompileCommands.currCwd) {
     dirs.push(CompileCommands.currCwd);
   }
   compiler.compile(dirs);
 }
 
-// "Save All" fires one event per file; coalesce them into one compile.
-function scheduleCompileOnSave(file: string): void {
-  savedFiles.push(file);
-  clearTimeout(saveDebounce);
-  saveDebounce = setTimeout(() => {
-    const files = savedFiles;
-    savedFiles = [];
+function knownProjects(): PProject[] {
+  return CompileCommands.projects.map((p) => ({
+    dir: p.description ?? "",
+    pprojPath: path.join(p.description ?? "", p.label),
+  }));
+}
+
+// "Save All" or a git checkout changes many files at once; coalesce them into
+// one round of compiles.
+function scheduleCompile(file: string): void {
+  changedFiles.push(file);
+  clearTimeout(changeDebounce);
+  changeDebounce = setTimeout(() => {
+    const files = changedFiles;
+    changedFiles = [];
     void compile(files);
-  }, 200);
+  }, 300);
 }
 
 /*

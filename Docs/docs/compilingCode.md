@@ -16,7 +16,7 @@ Compiling P programs is now super easy with Peasy!
 
 Peasy compiles a P project with `p compile` whenever one of its P files changes, whether you save it or it changes on disk, for example after a `git checkout`. Opening a file compiles its project too, unless nothing changed since the last compile. To compile the current project yourself, press ++ctrl++ + ++b++ or ++f5++.
 
-Compilation runs in the background. The `P` item in the status bar spins while compiling, then shows a check mark or the number of errors. Hover over it to see the result for each project, or click it to see the full compiler output. The item appears only while you edit a P file or another file in a P project.
+Compilation runs in the background. The `P` item in the status bar spins while compiling, then shows a check mark or the number of errors. Hover over it to see the result for each project, or click it to show or hide the full compiler output. The item appears only while you edit a P file or another file in a P project.
 
 A P file outside any project, with no `.pproj` file in its folder or a parent folder, is not compiled. The item then shows a warning; hover over or click it to see why. Pressing ++ctrl++ + ++b++ or ++f5++ tells you so too.
 

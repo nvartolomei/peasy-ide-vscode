@@ -26,7 +26,7 @@ export default class CompileCommands {
   public static async createAndRegister(
     context: vscode.ExtensionContext
   ): Promise<CompileCommands> {
-    compiler = new BackgroundCompiler(showCompilerOutputCommand);
+    compiler = new BackgroundCompiler(toggleCompilerOutputCommand);
     await generateProjects();
     createCompileTask();
 
@@ -47,6 +47,10 @@ export default class CompileCommands {
       vscode.commands.registerCommand("peasy.compile", () => compileActive()),
       vscode.commands.registerCommand(showCompilerOutputCommand, () =>
         compiler?.showOutput()
+      ),
+      // For the status bar item only, so not in package.json.
+      vscode.commands.registerCommand(toggleCompilerOutputCommand, () =>
+        compiler?.toggleOutput()
       ),
       watcher,
       watcher.onDidChange(onChange),
@@ -75,6 +79,7 @@ export default class CompileCommands {
 }
 
 const showCompilerOutputCommand = "peasy.showCompilerOutput";
+const toggleCompilerOutputCommand = "peasy.toggleCompilerOutput";
 let compiler: BackgroundCompiler | undefined;
 let changeDebounce: NodeJS.Timeout | undefined;
 let changedFiles: string[] = [];

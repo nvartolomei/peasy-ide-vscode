@@ -11,10 +11,11 @@ All notable changes to the Peasy extension are documented in this file.
 
 ### Changed
 - Compilation runs in the background instead of a terminal. A status bar item
-  shows progress and the error count; clicking it opens the compiler output
-  (also `Peasy: Show Compiler Output`). The item appears only for P files and
-  files in a P project, and warns about a P file outside any project. The
-  `p-vscode: Compile` task is still available for `tasks.json` and Run Task.
+  shows progress and the error count; clicking it shows or hides the compiler
+  output (also `Peasy: Show Compiler Output`). The item appears only for P
+  files and files in a P project, and warns about a P file outside any
+  project. The `p-vscode: Compile` task is still available for `tasks.json`
+  and Run Task.
 - Saving or pressing `F5` / `Ctrl+B` compiles the project that contains the
   file and every project that includes it, rather than the first project
   found in the workspace. Each project keeps its own errors.

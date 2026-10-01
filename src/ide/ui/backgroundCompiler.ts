@@ -27,7 +27,7 @@ interface ProjectResult {
 // Runs `p compile` in the background and reports the result as editor
 // diagnostics and a status bar item, instead of in a terminal. The full
 // compiler output goes to the "P Compiler" output channel, which the status
-// bar item opens.
+// bar item shows and hides.
 //
 // One compile runs at a time. Requested projects wait in a queue; a request
 // for the project being compiled restarts it. Every project keeps the errors
@@ -46,14 +46,27 @@ export default class BackgroundCompiler implements vscode.Disposable {
   // The P file outside any project reported by the last line of the output.
   private reportedOrphan: string | undefined;
 
-  constructor(showOutputCommand: string) {
+  constructor(toggleOutputCommand: string) {
     this.status.name = "P Compiler";
-    this.status.command = showOutputCommand;
+    this.status.command = toggleOutputCommand;
     this.updateStatus();
   }
 
   showOutput(): void {
     this.output.show(true);
+  }
+
+  // VS Code cannot say whether an output channel is visible, but a visible one
+  // is among the visible text editors.
+  toggleOutput(): void {
+    const visible = vscode.window.visibleTextEditors.some(
+      (e) => e.document.uri.scheme === "output" && e.document.uri.path.includes(this.output.name)
+    );
+    if (visible) {
+      this.output.hide();
+    } else {
+      this.output.show(true);
+    }
   }
 
   compile(projectDirs: string[]): void {

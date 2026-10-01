@@ -1,10 +1,7 @@
 export namespace Messages {
   export namespace CompilationStatus {
-    export const NoPprojFile =
-      "The current directory does not contain ANY local *.pproj folder. Compilation is impossible.";
-    export const MultiplePprofFile =
-      "The current directory contains multiple *.pproj folders. Please select which project to compile.";
-    export const NoDirectory = "The current directory is invalid.";
+    export const NoPprojFile = "Nothing to compile: the workspace has no .pproj file.";
+    export const NoDirectory = "Open a folder with a .pproj file to compile.";
   }
 
   export namespace Compiler {

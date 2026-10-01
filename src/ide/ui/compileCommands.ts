@@ -43,7 +43,13 @@ export default class CompileCommands {
     context.subscriptions.push(
       compiler,
       vscode.commands.registerCommand("peasy.showProjectFiles", () => showFiles()),
-      vscode.commands.registerCommand("peasy.compile", () => compile(activeFile())),
+      vscode.commands.registerCommand("peasy.compile", () => {
+        if (CompileCommands.projects.length === 0) {
+          showNoProjects();
+          return;
+        }
+        return compile(activeFile());
+      }),
       vscode.commands.registerCommand(showCompilerOutputCommand, () =>
         compiler?.showOutput()
       ),
@@ -169,16 +175,11 @@ function scheduleCompile(file: string): void {
   }, 300);
 }
 
-/*
-Shows message if there is no need to select a project.
-Shows quick pick if there are multiple projects to compile.
-*/
+// Lets the user pick the project to compile, or says there is none.
 async function showFiles() {
   await generateProjects();
-  if (CompileCommands.projects.length <= 0) {
-    vscode.window.showInformationMessage(
-      "There is no alternative P project to select because there is only one P project in the repository."
-    );
+  if (CompileCommands.projects.length === 0) {
+    showNoProjects();
   } else {
     const selection = await vscode.window.showQuickPick(
       CompileCommands.projects,
@@ -240,42 +241,22 @@ function createCompileTask() {
   });
 }
 
-/*
-Choose file to compile.
-Case 1: No pproj file -> Error window
-Case 2: One pproj file -> single project
-Case 3: Multiple pproj files -> quick pick shows many lines
-*/
+// Only for commands the user runs. Activation and background compiles stay
+// quiet in a workspace without a P project.
+function showNoProjects(): void {
+  const { CompilationStatus } = messages.Messages;
+  vscode.window.showErrorMessage(
+    vscode.workspace.workspaceFolders ? CompilationStatus.NoPprojFile : CompilationStatus.NoDirectory
+  );
+}
+
+// Finds the P projects in the workspace. The first one is active until
+// another is picked.
 async function generateProjects() {
-  const files = await searchDirectory(path.join("**", "*.pproj"));
-  if (files == null) {
-    vscode.window.showErrorMessage(
-      messages.Messages.CompilationStatus.NoDirectory
-    );
-    return;
-  }
-  if (files.length === 0) {
-    vscode.window.showErrorMessage(
-      messages.Messages.CompilationStatus.NoPprojFile
-    );
-    return;
-  }
-
-  if (files.length === 1) {
-    const first = files[0];
-    const fileName = path.parse(first.fsPath).base;
-    const directory = path.dirname(first.fsPath);
-
-    CompileCommands.projects = [{ label: fileName, description: directory }];
-    CompileCommands.currCwd = directory;
-    return;
-  }
-
-  CompileCommands.projects = files.map((f) => {
-    const fileName = path.parse(f.fsPath).base;
-    return { label: fileName, description: path.dirname(f.fsPath) };
-  });
-
-  const first = CompileCommands.projects[0];
-  CompileCommands.currCwd = first.description ?? "";
+  const files = (await searchDirectory(path.join("**", "*.pproj"))) ?? [];
+  CompileCommands.projects = files.map((f) => ({
+    label: path.basename(f.fsPath),
+    description: path.dirname(f.fsPath),
+  }));
+  CompileCommands.currCwd = CompileCommands.projects[0]?.description ?? "";
 }

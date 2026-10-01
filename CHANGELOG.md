@@ -24,6 +24,8 @@ All notable changes to the Peasy extension are documented in this file.
   `p-vscode.compile.includingProjects` control what compiles automatically.
 
 ### Fixed
+- Opening a workspace without a `.pproj` file no longer shows an error. The
+  error now appears only when you run a compile command.
 - Saving a P file no longer also runs a background Stately compile, which
   duplicated compilation and failed on P 3.1+.
 - `F5` / `Ctrl+B` / `F4` / `Ctrl+L` no longer terminate every running task in

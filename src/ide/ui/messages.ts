@@ -2,6 +2,8 @@ export namespace Messages {
   export namespace CompilationStatus {
     export const NoPprojFile = "Nothing to compile: the workspace has no .pproj file.";
     export const NoDirectory = "Open a folder with a .pproj file to compile.";
+    export const NotInProject = (file: string) =>
+      `${file} is not compiled, because no .pproj file is in its folder or a parent folder.`;
   }
 
   export namespace Compiler {

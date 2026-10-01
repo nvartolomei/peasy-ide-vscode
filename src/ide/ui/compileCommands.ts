@@ -8,6 +8,7 @@ import { PCommands } from "../../commands";
 import BackgroundCompiler, { ActiveEditor } from "./backgroundCompiler";
 import { PProject, affectedProjectDirs, owningProjectDir } from "./pProjects";
 import TestingEditor from "./testinginEditor";
+import { PDocumentFilter } from "../tools/vscode";
 
 // Compiles the active P project in the background on save and on request.
 // The `p-vscode: Compile` task is still provided for tasks.json and Run Task.
@@ -111,8 +112,8 @@ async function compile(files: string[]): Promise<void> {
   requestCompile(await affectedProjectDirs(files, knownProjects(), includingProjects));
 }
 
-// Compiles the active file's projects; any other editor compiles the selected
-// project.
+// Compiles the active file's projects. A P file outside any project gets a
+// message instead; any other editor compiles the selected project.
 async function compileActive(): Promise<void> {
   if (CompileCommands.projects.length === 0) {
     showNoProjects();
@@ -122,6 +123,11 @@ async function compileActive(): Promise<void> {
   switch (active.kind) {
     case "project":
       return compile([active.file]);
+    case "orphan":
+      vscode.window.showErrorMessage(
+        messages.Messages.CompilationStatus.NotInProject(path.basename(active.file))
+      );
+      return;
     case "other":
       requestCompile([CompileCommands.currCwd]);
   }
@@ -281,8 +287,14 @@ function updateStatusFile(editor = vscode.window.activeTextEditor): void {
 
 function classifyEditor(editor = vscode.window.activeTextEditor): ActiveEditor {
   const [file] = activeFile(editor);
-  if (file !== undefined && owningProjectDir(file, knownProjects()) !== undefined) {
+  if (file === undefined) {
+    return { kind: "other" };
+  }
+  if (owningProjectDir(file, knownProjects()) !== undefined) {
     return { kind: "project", file };
+  }
+  if (editor && vscode.languages.match(PDocumentFilter, editor.document) > 0) {
+    return { kind: "orphan", file };
   }
   return { kind: "other" };
 }

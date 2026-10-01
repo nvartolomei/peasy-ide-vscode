@@ -12,8 +12,12 @@ interface Run {
   cancelled: boolean;
 }
 
-// The file in the active editor: part of a P project, or anything else.
-export type ActiveEditor = { kind: "project"; file: string } | { kind: "other" };
+// The file in the active editor: part of a P project, a P file outside any
+// project, or anything else.
+export type ActiveEditor =
+  | { kind: "project"; file: string }
+  | { kind: "orphan"; file: string }
+  | { kind: "other" };
 
 interface ProjectResult {
   diagnostics: Map<string, vscode.Diagnostic[]>;
@@ -39,6 +43,8 @@ export default class BackgroundCompiler implements vscode.Disposable {
   private current: Run | undefined;
   private pMissing = false;
   private editor: ActiveEditor = { kind: "other" };
+  // The P file outside any project reported by the last line of the output.
+  private reportedOrphan: string | undefined;
 
   constructor(showOutputCommand: string) {
     this.status.name = "P Compiler";
@@ -89,7 +95,7 @@ export default class BackgroundCompiler implements vscode.Disposable {
     if (this.current) {
       this.current.cancelled = true;
       this.current.child?.kill();
-      this.output.appendLine(`[${path.basename(this.current.dir)}] cancelled`);
+      this.write(`[${path.basename(this.current.dir)}] cancelled\n`);
       this.current = undefined;
     }
   }
@@ -99,26 +105,26 @@ export default class BackgroundCompiler implements vscode.Disposable {
     const binary = await resolvePBinary();
     this.pMissing = !binary;
     if (!binary) {
-      this.output.appendLine(Messages.Installation.noP);
+      this.write(`${Messages.Installation.noP}\n`);
       return;
     }
     if (run.cancelled) {
       return;
     }
 
-    this.output.appendLine(`[${name}] p compile (${run.dir}) at ${new Date().toLocaleTimeString()}`);
+    this.write(`[${name}] p compile (${run.dir}) at ${new Date().toLocaleTimeString()}\n`);
     let text = "";
     const child = spawn(binary, ["compile"], { cwd: run.dir });
     run.child = child;
     const onData = (chunk: Buffer) => {
       text += chunk.toString();
-      this.output.append(chunk.toString());
+      this.write(chunk.toString());
     };
     child.stdout?.on("data", onData);
     child.stderr?.on("data", onData);
     const exitCode = await new Promise<number | null>((resolve) => {
       child.on("error", (err) => {
-        this.output.appendLine(String(err));
+        this.write(`${err}\n`);
         resolve(null);
       });
       child.on("close", resolve);
@@ -157,11 +163,23 @@ export default class BackgroundCompiler implements vscode.Disposable {
 
   setActiveEditor(editor: ActiveEditor): void {
     this.editor = editor;
+    // Nothing else in the output explains why such a file is not compiled.
+    if (editor.kind === "orphan" && editor.file !== this.reportedOrphan) {
+      this.write(`${Messages.CompilationStatus.NotInProject(editor.file)}\n`);
+      this.reportedOrphan = editor.file;
+    }
     this.updateStatus();
   }
 
+  // Every write goes through here, so the orphan report is known to be the
+  // last line only until something else is written.
+  private write(text: string): void {
+    this.reportedOrphan = undefined;
+    this.output.append(text);
+  }
+
   private updateStatus(): void {
-    // Show the item only for files in a P project.
+    // Show the item only for P files and files in a P project.
     if (this.editor.kind === "other") {
       this.status.hide();
       return;
@@ -179,6 +197,10 @@ export default class BackgroundCompiler implements vscode.Disposable {
     if (this.pMissing) {
       this.status.text = "$(warning) P";
       this.status.tooltip = Messages.Installation.noP;
+    } else if (this.editor.kind === "orphan") {
+      const file = path.basename(this.editor.file);
+      this.status.text = "$(warning) P";
+      this.status.tooltip = `P: ${Messages.CompilationStatus.NotInProject(file)}`;
     } else if (this.current) {
       const queued = this.queue.length > 0 ? `, ${this.queue.length} queued` : "";
       this.status.text = "$(sync~spin) P";

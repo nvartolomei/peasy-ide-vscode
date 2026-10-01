@@ -12,7 +12,7 @@ import TestingEditor from "./testinginEditor";
 // Compiles the active P project in the background on save and on request.
 // The `p-vscode: Compile` task is still provided for tasks.json and Run Task.
 export default class CompileCommands {
-  // Directory of the active P project; compiles run here.
+  // Directory of the project picked in the quick pick, or the first one.
   static currCwd = "";
   // All discovered P projects (one quick-pick entry per .pproj).
   static projects: vscode.QuickPickItem[] = [];
@@ -43,13 +43,7 @@ export default class CompileCommands {
     context.subscriptions.push(
       compiler,
       vscode.commands.registerCommand("peasy.showProjectFiles", () => showFiles()),
-      vscode.commands.registerCommand("peasy.compile", () => {
-        if (CompileCommands.projects.length === 0) {
-          showNoProjects();
-          return;
-        }
-        return compile(activeFile());
-      }),
+      vscode.commands.registerCommand("peasy.compile", () => compileActive()),
       vscode.commands.registerCommand(showCompilerOutputCommand, () =>
         compiler?.showOutput()
       ),
@@ -108,18 +102,29 @@ function activeFile(editor = vscode.window.activeTextEditor): string[] {
 }
 
 // Compiles every project affected by `files`: the projects containing them and
-// the projects including those. Without any, compiles the project picked in
-// the project quick pick.
-async function compile(files: string[] = []): Promise<void> {
+// the projects including those.
+async function compile(files: string[]): Promise<void> {
   if (!compiler) {
     return;
   }
   const { includingProjects } = compileSettings();
-  const dirs = await affectedProjectDirs(files, knownProjects(), includingProjects);
-  if (dirs.length === 0 && CompileCommands.currCwd) {
-    dirs.push(CompileCommands.currCwd);
+  requestCompile(await affectedProjectDirs(files, knownProjects(), includingProjects));
+}
+
+// Compiles the active file's projects; any other editor compiles the selected
+// project.
+async function compileActive(): Promise<void> {
+  if (CompileCommands.projects.length === 0) {
+    showNoProjects();
+    return;
   }
-  requestCompile(dirs);
+  const active = classifyEditor();
+  switch (active.kind) {
+    case "project":
+      return compile([active.file]);
+    case "other":
+      requestCompile([CompileCommands.currCwd]);
+  }
 }
 
 // Projects compiled, or queued to compile, since their sources last changed.
@@ -188,7 +193,7 @@ async function showFiles() {
       CompileCommands.options
     );
     if (selection) {
-      await compile();
+      requestCompile([CompileCommands.currCwd]);
     }
   }
 }
@@ -277,7 +282,7 @@ function updateStatusFile(editor = vscode.window.activeTextEditor): void {
 function classifyEditor(editor = vscode.window.activeTextEditor): ActiveEditor {
   const [file] = activeFile(editor);
   if (file !== undefined && owningProjectDir(file, knownProjects()) !== undefined) {
-    return { kind: "project" };
+    return { kind: "project", file };
   }
   return { kind: "other" };
 }

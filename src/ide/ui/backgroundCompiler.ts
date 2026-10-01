@@ -13,7 +13,7 @@ interface Run {
 }
 
 // The file in the active editor: part of a P project, or anything else.
-export type ActiveEditor = { kind: "project" } | { kind: "other" };
+export type ActiveEditor = { kind: "project"; file: string } | { kind: "other" };
 
 interface ProjectResult {
   diagnostics: Map<string, vscode.Diagnostic[]>;

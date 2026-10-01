@@ -12,6 +12,9 @@ interface Run {
   cancelled: boolean;
 }
 
+// The file in the active editor: part of a P project, or anything else.
+export type ActiveEditor = { kind: "project" } | { kind: "other" };
+
 interface ProjectResult {
   diagnostics: Map<string, vscode.Diagnostic[]>;
   failed: boolean;
@@ -35,12 +38,12 @@ export default class BackgroundCompiler implements vscode.Disposable {
   private queue: string[] = [];
   private current: Run | undefined;
   private pMissing = false;
+  private editor: ActiveEditor = { kind: "other" };
 
   constructor(showOutputCommand: string) {
     this.status.name = "P Compiler";
     this.status.command = showOutputCommand;
     this.updateStatus();
-    this.status.show();
   }
 
   showOutput(): void {
@@ -152,7 +155,18 @@ export default class BackgroundCompiler implements vscode.Disposable {
     }
   }
 
+  setActiveEditor(editor: ActiveEditor): void {
+    this.editor = editor;
+    this.updateStatus();
+  }
+
   private updateStatus(): void {
+    // Show the item only for files in a P project.
+    if (this.editor.kind === "other") {
+      this.status.hide();
+      return;
+    }
+
     const summaries = [...this.results].map(([dir, r]) => {
       const count = [...r.diagnostics.values()].reduce((n, l) => n + l.length, 0);
       const result = r.failed ? "failed" : count === 0 ? "ok" : `${count} error${count === 1 ? "" : "s"}`;
@@ -179,6 +193,7 @@ export default class BackgroundCompiler implements vscode.Disposable {
       this.status.text = "$(question) P";
       this.status.tooltip = "P: not compiled yet";
     }
+    this.status.show();
   }
 }
 

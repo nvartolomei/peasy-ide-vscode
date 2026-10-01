@@ -5,8 +5,8 @@ import * as messages from "./messages";
 import { ConfigurationConstants } from "../../constants";
 import { checkPInstalled, searchDirectory } from "../../miscTools";
 import { PCommands } from "../../commands";
-import BackgroundCompiler from "./backgroundCompiler";
-import { PProject, affectedProjectDirs } from "./pProjects";
+import BackgroundCompiler, { ActiveEditor } from "./backgroundCompiler";
+import { PProject, affectedProjectDirs, owningProjectDir } from "./pProjects";
 import TestingEditor from "./testinginEditor";
 
 // Compiles the active P project in the background on save and on request.
@@ -25,9 +25,9 @@ export default class CompileCommands {
   public static async createAndRegister(
     context: vscode.ExtensionContext
   ): Promise<CompileCommands> {
+    compiler = new BackgroundCompiler(showCompilerOutputCommand);
     await generateProjects();
     createCompileTask();
-    compiler = new BackgroundCompiler(showCompilerOutputCommand);
 
     // Watching the file system rather than editor saves also picks up
     // changes made outside the editor, such as a git checkout.
@@ -58,8 +58,10 @@ export default class CompileCommands {
       watcher.onDidCreate(onCreateOrDelete),
       watcher.onDidDelete(onCreateOrDelete),
       vscode.window.onDidChangeActiveTextEditor((editor) => {
-        if (editor?.document.uri.scheme === "file") {
-          void compileIfStale(editor.document.uri.fsPath);
+        updateStatusFile(editor);
+        const [file] = activeFile(editor);
+        if (file) {
+          void compileIfStale(file);
         }
       }),
       {
@@ -100,8 +102,8 @@ function compileSettings(): CompileSettings {
   };
 }
 
-function activeFile(): string[] {
-  const uri = vscode.window.activeTextEditor?.document.uri;
+function activeFile(editor = vscode.window.activeTextEditor): string[] {
+  const uri = editor?.document.uri;
   return uri?.scheme === "file" ? [uri.fsPath] : [];
 }
 
@@ -259,4 +261,23 @@ async function generateProjects() {
     description: path.dirname(f.fsPath),
   }));
   CompileCommands.currCwd = CompileCommands.projects[0]?.description ?? "";
+  updateStatusFile();
+}
+
+// Tells the status bar item what the active editor shows. Focusing an output
+// channel, such as the compiler output, makes it the active editor; leave the
+// item as it is.
+function updateStatusFile(editor = vscode.window.activeTextEditor): void {
+  if (editor?.document.uri.scheme === "output") {
+    return;
+  }
+  compiler?.setActiveEditor(classifyEditor(editor));
+}
+
+function classifyEditor(editor = vscode.window.activeTextEditor): ActiveEditor {
+  const [file] = activeFile(editor);
+  if (file !== undefined && owningProjectDir(file, knownProjects()) !== undefined) {
+    return { kind: "project" };
+  }
+  return { kind: "other" };
 }

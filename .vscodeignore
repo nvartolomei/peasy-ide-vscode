@@ -15,6 +15,7 @@ vsc-extension-quickstart.md
 Docs/**
 Examples/**
 REVIEW.md
+NEXT.md
 
 # TypeScript sources — the bundled dist/extension.js is what ships
 src/**/*.ts

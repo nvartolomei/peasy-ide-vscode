@@ -23,9 +23,10 @@ VS Code-compatible extensions:
 | **Windsurf** | Open VSX | |
 | **Gitpod / code-server** | Open VSX | Desktop-only; the extension shells out to `p` and `dotnet` |
 
-The extension is **desktop-only** (`extensionKind: ["workspace", "ui"]`). It
-will not load in vscode.dev / github.dev because P compilation requires the
-`p` CLI on PATH.
+The extension is **desktop-only** and runs where the workspace is
+(`extensionKind: ["workspace"]`): over Remote-SSH, WSL or Dev Containers it
+runs on the remote host and needs the `p` CLI there. It will not load in
+vscode.dev / github.dev because P compilation requires the `p` CLI on PATH.
 
 ## Prerequisites
 
@@ -42,6 +43,9 @@ All settings live under the `p-vscode` namespace:
 | `p-vscode.schedules` | `1000` | Schedule count for `p check` runs in the testing panel. |
 | `p-vscode.additionalArgs` | `""` | Extra args passed to `p check`. |
 | `p-vscode.pcompile.exclude` | `["**/Build/*", "**/build/**"]` | Globs excluded from `.pproj` discovery. |
+| `p-vscode.compile.onChange` | `true` | Compile when P files change on disk. |
+| `p-vscode.compile.onOpen` | `true` | Compile the project of an opened file if it changed since its last compile. |
+| `p-vscode.compile.includingProjects` | `true` | Also compile projects that include a compiled project. |
 | `p-vscode.trace.server` | `"off"` | LSP trace level (`off` / `messages` / `verbose`). |
 | `p-vscode.dotnetExecutablePath` | `""` | Absolute path to `dotnet`. Empty → resolve from PATH. |
 | `p-vscode.languageServer.cliPath` | `""` | Absolute path to `PLanguageServer.dll`. |
@@ -55,7 +59,6 @@ interfere with the host IDE's defaults when you're editing other files.
 | Key | Action |
 |---|---|
 | `F5` / `Ctrl+B` | Compile the current P project |
-| `F7` | Compile in Stately visualization mode |
 | `F6` | Open the Peasy trace visualizer |
 | `F4` / `Ctrl+L` | Show the project file picker |
 
